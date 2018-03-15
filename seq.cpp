@@ -3,12 +3,22 @@
 #include <math.h>
 #include <cstring>
 
+const bool residual = true; // Считать ли невязку
 
-const bool DEBUG = false;
+const bool func_fill = false; // Заполнять таблицу функцией fill или же по файлу
 
-const bool timer = true;
+const bool DEBUG = false; 
+
+const bool timer = true; // Писать ли время выполнения в stats
 
 using namespace std;
+
+float fill(int i, int j)
+{
+	return i>j?i:j;
+}
+
+
 
 void show_system(int n, float** A, float b[])
 {
@@ -24,41 +34,64 @@ void show_system(int n, float** A, float b[])
 
 int main(int argc, char** argv)
 {
-	// Инициализация системы
-	char* filename;
-	if (argc > 1)
-	{
-		filename = argv[1];
-	}
-	else
-	{
-		filename = new char[12];
-		strcpy(filename, "matrixn.txt");
-	}
-	ifstream file(filename, ifstream::binary);
 	int n;
-	file.read((char*)&n, sizeof(int));
-	float **A = new float*[n];
-	for (int i = 0; i < n; i++)
+	float **A;
+	float *b;
+	// Инициализация системы
+	if (func_fill)
 	{
-		A[i] = new float[n];
-	}
-	float tmpA[n][n];
-	float b[n];
-	float tmpb[n];
-	for (int i = 0; i < n; i++) 
-	{
-		for (int j = 0; j < n; j++)
+		int n;
+		cout << "Размер генерируемой системы: ";
+		cin >> n;
+		A = new float*[n];
+		for (int i = 0; i < n; i++)
 		{
-			file.read((char*)&A[i][j], sizeof(float));
+			A[i] = new float[n];
 		}
-	}
-	for (int i = 0; i < n; i++)
+		b = new float[n];
+		for (int i = 0; i < n; i++)
+		{
+			b[i] = 0;
+			for (int j = 0; j < n; j++)
+			{
+				A[i][j] = fill(i,j);
+				if (j % 2 == 0) b[i] += A[i][j];
+			}
+		}
+	} else
 	{
-		file.read((char*)&b[i], sizeof(float));
+		char* filename;
+		if (argc > 1)
+		{
+			filename = argv[1];
+		}
+		else
+		{
+			filename = new char[12];
+			strcpy(filename, "matrixn.txt");
+		}
+		ifstream file(filename, ifstream::binary);
+		n;
+		file.read((char*)&n, sizeof(int));
+		A = new float*[n];
+		for (int i = 0; i < n; i++)
+		{
+			A[i] = new float[n];
+		}
+		b = new float[n];
+		for (int i = 0; i < n; i++) 
+		{
+			for (int j = 0; j < n; j++)
+			{
+				file.read((char*)&A[i][j], sizeof(float));
+			}
+		}
+		for (int i = 0; i < n; i++)
+		{
+			file.read((char*)&b[i], sizeof(float));
+		}
+		file.close();
 	}
-	file.close();
-
 	show_system(n,A,b);
 
 	clock_t t1_start, t1_end, t2_start, t2_end;
@@ -87,17 +120,6 @@ int main(int argc, char** argv)
 			x[j] /= x_norm;
 		}
 		
-		/*for (int j = i; j < n; j++)
-		{
-			for (int k = i; k < n; k++)
-			{
-				tmpA[j][k] = A[j][k];
-				for (int l = i; l < n; l++)
-				{
-					tmpA[j][k] -= 2*x[j-i]*x[l-i]*A[l][k];
-				}
-			}
-		}*/
 		for (int j = i; j < n; j++)
 		{
 			xA[j-i] = 0;
@@ -113,14 +135,6 @@ int main(int argc, char** argv)
 				A[j][k] -= 2*x[j-i]*xA[k-i];
 			}
 		}
-		/*for (int j = i; j < n; j++)
-		{
-			tmpb[j] = b[j];
-			for (int k = i; k < n; k++)
-			{
-				tmpb[j] -= 2*x[j-i]*x[k-i]*b[k];
-			}
-		}*/
 		float bx = 0;
 		for (int j = i; j < n; j++)
 		{
@@ -130,17 +144,6 @@ int main(int argc, char** argv)
 		{
 			b[j] -= 2*x[j-i]*bx;
 		}
-		/*for (int j = i; j < n; j++)
-		{
-			for (int k = i; k < n; k++)
-			{
-				A[j][k] = tmpA[j][k];
-			}
-		}
-		for (int j = i; j < n; j++)
-		{
-			b[j] = tmpb[j];
-		}*/
 		if (DEBUG)
 		{
 			cout << endl << "------" << i << "------" << endl;
@@ -166,6 +169,22 @@ int main(int argc, char** argv)
 	{
 		cout << "x" << i << " = " << ans[i] << endl;
 	}
+
+	if (residual)
+	{
+		float r = 0;
+		float rtmp;
+		for (int i = 0; i < n; i++)
+		{
+			rtmp = b[i];
+			for (int j = 0; j < n; j++)
+			{
+				rtmp -= A[i][j] * ans[j];
+			}
+			r += rtmp * rtmp;
+		}
+		cout << "Невязка: " << sqrt(r) << endl;
+	}	
 
 	ofstream stats("stats", ofstream::app);
 	stats << 1 << " " << n << " " << (float)(t1_end-t1_start)/CLOCKS_PER_SEC << " " << (float)(t2_end-t2_start)/CLOCKS_PER_SEC << endl;

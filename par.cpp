@@ -4,9 +4,18 @@
 #include <mpi.h>
 
 
+const bool func_fill = false; // Заполнять ли матрицу функцией
+
 using namespace std;
 
 const bool timer = true;
+
+const bool residual = true; // Считать ли невязку
+
+float fill(int i, int j)
+{
+	return i>j?i:j;
+}
 
 void print_by_cols(float **A, float *b, int size, int n, int rank)
 {
@@ -46,51 +55,82 @@ int main(int argc, char** argv)
 	MPI_Init(&argc, &argv);	
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	char* filename;
-	if (argc > 1)
-	{
-		filename = argv[1];
-	}
-	else
-	{
-		filename = new char[12];
-		strcpy(filename, "matrixn.txt");
-	}
-	MPI_File file;
-	MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &file);
 	int n;
-	MPI_File_read(file, &n, 1, MPI_INT, MPI_STATUS_IGNORE);
-	int numcols = n / size + ((rank < n % size)?1:0);
-	//cout << "Процесс " << rank << " берёт " << numcols << " столбцов" << endl;
-	float **A = new float*[numcols];
-	for (int i = 0; i < numcols; i++)
-	{
-		A[i] = new float[n];
-	}
-	float tmpA[n];
-	// Чтение матрицы
-	MPI_File_seek(file, sizeof(int)+rank*sizeof(float), MPI_SEEK_SET);
-	for (int i = 0; i < n; i++)
-	{
-		int j;
-		int k = 0;
-		for (j = rank; j < n; j += size, k++)
-		{
-			MPI_File_read(file, &A[k][i], 1, MPI_FLOAT, MPI_STATUS_IGNORE);
-			MPI_File_seek(file, (size-1)*sizeof(float), MPI_SEEK_CUR);
-		}
-		if (i != n-1)
-		{
-			MPI_File_seek(file, (n-j+rank)*sizeof(float), MPI_SEEK_CUR);
-		}
-	}
+	int numcols;
+	float **A;
 	float *b;
-	float *tmpb;
-	b = new float[n];
-	tmpb = new float[n];
-	MPI_File_seek(file, sizeof(int)+n*n*sizeof(float), MPI_SEEK_SET);
-	MPI_File_read(file, b, n, MPI_FLOAT, MPI_STATUS_IGNORE);
-
+	if (func_fill)
+	{
+		if (rank == 0)
+		{
+			cout << "Размер системы: ";
+			cin >> n;
+		}
+		MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		numcols = n / size + ((rank < n % size)?1:0);
+		A = new float*[numcols];
+		for (int i = 0; i < numcols; i++)
+		{
+			A[i] = new float[n];
+		}
+		b = new float[n];
+		for (int i = 0; i < n; i++)
+		{
+			float sum_part = 0;
+			int j;
+			int k = 0;
+			for (j = rank; j < n; j += size, k++)
+			{
+				A[k][i] = fill(i,j);
+				if (j % 2 == 0)
+				{
+					sum_part += A[k][i];
+				}
+			}
+			MPI_Reduce(&sum_part, &b[i], 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+		}
+	} else
+	{
+		char* filename;
+		if (argc > 1)
+		{
+			filename = argv[1];
+		}
+		else
+		{
+			filename = new char[12];
+			strcpy(filename, "matrixn.txt");
+		}
+		MPI_File file;
+		MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &file);
+		MPI_File_read(file, &n, 1, MPI_INT, MPI_STATUS_IGNORE);
+		numcols = n / size + ((rank < n % size)?1:0);
+		//cout << "Процесс " << rank << " берёт " << numcols << " столбцов" << endl;
+		A = new float*[numcols];
+		for (int i = 0; i < numcols; i++)
+		{
+			A[i] = new float[n];
+		}
+		// Чтение матрицы
+		MPI_File_seek(file, sizeof(int)+rank*sizeof(float), MPI_SEEK_SET);
+		for (int i = 0; i < n; i++)
+		{
+			int j;
+			int k = 0;
+			for (j = rank; j < n; j += size, k++)
+			{
+				MPI_File_read(file, &A[k][i], 1, MPI_FLOAT, MPI_STATUS_IGNORE);
+				MPI_File_seek(file, (size-1)*sizeof(float), MPI_SEEK_CUR);
+			}
+			if (i != n-1)
+			{
+				MPI_File_seek(file, (n-j+rank)*sizeof(float), MPI_SEEK_CUR);
+			}
+		}
+		b = new float[n];
+		MPI_File_seek(file, sizeof(int)+n*n*sizeof(float), MPI_SEEK_SET);
+		MPI_File_read(file, b, n, MPI_FLOAT, MPI_STATUS_IGNORE);
+	}
 
 	// Вывод матрицы
 	// print_by_cols(A, b, size, n, rank);
@@ -136,18 +176,6 @@ int main(int argc, char** argv)
 			{
 				A[k][l] -= 2*xA*x[l-i];
 			}
-			/*for (int l = i; l < n; l++)
-			{
-				tmpA[l] = A[k][l];
-				for (int m = i; m < n; m++)
-				{
-					tmpA[l] -= 2*x[l-i]*x[m-i]*A[k][m];
-				}
-			}
-			for (int l = i; l < n; l++)
-			{
-				A[k][l] = tmpA[l];
-			}*/
 		}
 		if (rank == 0)
 		{
@@ -160,10 +188,6 @@ int main(int argc, char** argv)
 			{
 				b[j] -= 2*x[j-i]*bx;
 			}
-			/*for (int j = i; j < n; j++)
-			{
-				b[j] = tmpb[j];
-			}*/
 		}
 	}
 	t1_end = MPI_Wtime();
@@ -197,41 +221,35 @@ int main(int argc, char** argv)
 			cout << "x" << i << "=" << ans[i] << endl; 
 		}
 	}
+	if (residual)
+	{
+		float r = 0;
+		float rtmp_part, rtmp;
+		for (int i = 0; i < n; i++)
+		{
+			rtmp_part = 0;
+			int k = 0;
+			for (int j = rank; j < n; j += size, k++)
+			{
+				rtmp_part += A[k][i] * ans[j];
+			}
+			MPI_Reduce(&rtmp_part, &rtmp, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+			if (rank == 0)
+			{
+				r += (b[i]-rtmp) * (b[i]-rtmp);
+			}
+		}
+		if (rank == 0)
+		{
+			cout << "Невязка: " << sqrt(r) << endl;
+		}
+	}
 	if (rank == 0 and timer)
 	{
 		ofstream stats("stats", ofstream::app);
 		stats << size << " " << n << " " << t1_end-t1_start << " " << t2_end-t2_start << endl;
 		stats.close();
 	}
-	// Вывод матрицы
-/*	MPI_Barrier(MPI_COMM_WORLD);
-	for (int p = 0; p < size; p++)
-	{
-		if (rank == p)
-		{
-			if (rank == 0)
-			{
-				cout << "Правая часть" << endl;
-				for (int i = 0; i < n; i++)
-				{
-					cout << b[i] << " ";
-				}
-				cout << endl;
-			}
-			cout << "Процесс " << rank << endl;
-			int k = 0;
-			for (int i = rank; i < n; i += size, k++)
-			{
-				cout << "Столбец " << i << endl;
-				for (int j = 0; j < n; j++)
-				{
-					cout << A[k][j] << " ";
-				}
-				cout << endl;
-			}
-		}
-		MPI_Barrier(MPI_COMM_WORLD);
-	}*/
 	MPI_Finalize();
 	return 0;
 }
