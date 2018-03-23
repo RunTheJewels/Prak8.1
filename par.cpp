@@ -140,7 +140,7 @@ int main(int argc, char** argv)
 
 	// Вывод матрицы
 	// print_by_cols(A, b, size, n, rank);
-	float t1_start, t1_end, t2_start, t2_end;
+	double t1_start, t1_end, t2_start, t2_end;
 	t1_start = MPI_Wtime();
 	// Основная часть
 	for (int i = 0; i < n-1; i++)
@@ -252,14 +252,14 @@ int main(int argc, char** argv)
 	}
 	if (timer)
 	{
-		float t1 = t1_end-t1_start, t1_max;
-		float t2 = t2_end-t2_start, t2_max;
-		MPI_Reduce(&t1, &t1_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
-		MPI_Reduce(&t2, &t2_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
+		double t1 = t1_end-t1_start, t1_max;
+		double t2 = t2_end-t2_start, t2_max;
+		MPI_Reduce(&t1, &t1_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+		MPI_Reduce(&t2, &t2_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 		if (rank == 0)
 		{
 			ofstream stats("stats", ofstream::app);
-			stats << size << " " << n << " " << t1_max<< " " << t2_max << endl;
+			stats << size << " " << n << " " << scientific << t1_max << " " << scientific <<  t2_max << endl;
 			stats.close();
 		}
 	}
