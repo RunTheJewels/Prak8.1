@@ -2,9 +2,10 @@
 #include <fstream>
 #include <math.h>
 #include <mpi.h>
+#include <cstdlib>
 
 
-const bool func_fill = false; // Заполнять ли матрицу функцией
+const bool func_fill = true; // Заполнять ли матрицу функцией
 
 using namespace std;
 
@@ -12,12 +13,12 @@ const bool timer = true;
 
 const bool residual = true; // Считать ли невязку
 
-float fill(int i, int j)
+double fill(int i, int j)
 {
 	return i>j?i:j;
 }
 
-void print_by_cols(float **A, float *b, int size, int n, int rank)
+void print_by_cols(double **A, double *b, int size, int n, int rank)
 {
 	MPI_Barrier(MPI_COMM_WORLD);
 	for (int p = 0; p < size; p++)
@@ -57,26 +58,31 @@ int main(int argc, char** argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	int n;
 	int numcols;
-	float **A;
-	float *b;
+	double **A;
+	double *b;
 	if (func_fill)
 	{
-		if (rank == 0)
+		if (argc > 1)
 		{
-			cout << "Размер системы: ";
-			cin >> n;
+			n = atoi(argv[1]);
+		} else
+		{
+			if (rank == 0) cout << "Размер системы должен быть указан\n";
+			MPI_Barrier(MPI_COMM_WORLD);
+			MPI_Finalize();
+			return -1;
 		}
 		MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		numcols = n / size + ((rank < n % size)?1:0);
-		A = new float*[numcols];
+		A = new double*[numcols];
 		for (int i = 0; i < numcols; i++)
 		{
-			A[i] = new float[n];
+			A[i] = new double[n];
 		}
-		b = new float[n];
+		b = new double[n];
 		for (int i = 0; i < n; i++)
 		{
-			float sum_part = 0;
+			double sum_part = 0;
 			int j;
 			int k = 0;
 			for (j = rank; j < n; j += size, k++)
@@ -87,7 +93,7 @@ int main(int argc, char** argv)
 					sum_part += A[k][i];
 				}
 			}
-			MPI_Reduce(&sum_part, &b[i], 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+			MPI_Reduce(&sum_part, &b[i], 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 		}
 	} else
 	{
@@ -106,44 +112,44 @@ int main(int argc, char** argv)
 		MPI_File_read(file, &n, 1, MPI_INT, MPI_STATUS_IGNORE);
 		numcols = n / size + ((rank < n % size)?1:0);
 		//cout << "Процесс " << rank << " берёт " << numcols << " столбцов" << endl;
-		A = new float*[numcols];
+		A = new double*[numcols];
 		for (int i = 0; i < numcols; i++)
 		{
-			A[i] = new float[n];
+			A[i] = new double[n];
 		}
 		// Чтение матрицы
-		MPI_File_seek(file, sizeof(int)+rank*sizeof(float), MPI_SEEK_SET);
+		MPI_File_seek(file, sizeof(int)+rank*sizeof(double), MPI_SEEK_SET);
 		for (int i = 0; i < n; i++)
 		{
 			int j;
 			int k = 0;
 			for (j = rank; j < n; j += size, k++)
 			{
-				MPI_File_read(file, &A[k][i], 1, MPI_FLOAT, MPI_STATUS_IGNORE);
-				MPI_File_seek(file, (size-1)*sizeof(float), MPI_SEEK_CUR);
+				MPI_File_read(file, &A[k][i], 1, MPI_DOUBLE, MPI_STATUS_IGNORE);
+				MPI_File_seek(file, (size-1)*sizeof(double), MPI_SEEK_CUR);
 			}
 			if (i != n-1)
 			{
-				MPI_File_seek(file, (n-j+rank)*sizeof(float), MPI_SEEK_CUR);
+				MPI_File_seek(file, (n-j+rank)*sizeof(double), MPI_SEEK_CUR);
 			}
 		}
-		b = new float[n];
-		MPI_File_seek(file, sizeof(int)+n*n*sizeof(float), MPI_SEEK_SET);
-		MPI_File_read(file, b, n, MPI_FLOAT, MPI_STATUS_IGNORE);
+		b = new double[n];
+		MPI_File_seek(file, sizeof(int)+n*n*sizeof(double), MPI_SEEK_SET);
+		MPI_File_read(file, b, n, MPI_DOUBLE, MPI_STATUS_IGNORE);
 	}
 
 	// Вывод матрицы
 	// print_by_cols(A, b, size, n, rank);
-	double t1_start, t1_end, t2_start, t2_end;
+	float t1_start, t1_end, t2_start, t2_end;
 	t1_start = MPI_Wtime();
 	// Основная часть
 	for (int i = 0; i < n-1; i++)
 	{
-		float x[n-i];
+		double x[n-i];
 		int root = i % size;
 		if (rank == root)
 		{
-			float x_norm = 0;
+			double x_norm = 0;
 			for (int j = 0; j < n-i; j++)
 			{
 				x[j] = A[i/size][j+i];
@@ -162,12 +168,12 @@ int main(int argc, char** argv)
 				x[j] /= x_norm;
 			}
 		}
-		MPI_Bcast(x, n-i, MPI_FLOAT, root, MPI_COMM_WORLD);
+		MPI_Bcast(x, n-i, MPI_DOUBLE, root, MPI_COMM_WORLD);
 		int k = 0;
 		for (int j = rank; j < n; j += size, k++)
 		{
 			if (j < i) continue;
-			float xA = 0;
+			double xA = 0;
 			for (int l = i; l < n; l++)
 			{
 				xA += x[l-i] * A[k][l];
@@ -179,7 +185,7 @@ int main(int argc, char** argv)
 		}
 		if (rank == 0)
 		{
-			float bx = 0;
+			double bx = 0;
 			for (int j = i; j < n; j++)
 			{
 				bx += x[j-i]*b[j];
@@ -192,10 +198,10 @@ int main(int argc, char** argv)
 	}
 	t1_end = MPI_Wtime();
 	t2_start = MPI_Wtime();
-	float ans[n];
-	float mypart;
-	float allparts;
-	MPI_Bcast(b, n, MPI_FLOAT, 0, MPI_COMM_WORLD);
+	double ans[n];
+	double mypart;
+	double allparts;
+	MPI_Bcast(b, n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	for (int i = n-1; i >= 0; i--)
 	{
@@ -206,12 +212,12 @@ int main(int argc, char** argv)
 			if (j < i+1) continue;
 			mypart += A[k][i] * ans[j];
 		}
-		MPI_Reduce(&mypart, &allparts, 1, MPI_FLOAT, MPI_SUM, i%size, MPI_COMM_WORLD);
+		MPI_Reduce(&mypart, &allparts, 1, MPI_DOUBLE, MPI_SUM, i%size, MPI_COMM_WORLD);
 		if (rank == i%size)
 		{
 			ans[i] = (b[i] - allparts) / A[i/size][i];
 		}
-		MPI_Bcast(&ans[i], 1, MPI_FLOAT, i%size, MPI_COMM_WORLD);
+		MPI_Bcast(&ans[i], 1, MPI_DOUBLE, i%size, MPI_COMM_WORLD);
 	}	
 	t2_end = MPI_Wtime();
 	if (rank == 0)
@@ -223,8 +229,8 @@ int main(int argc, char** argv)
 	}
 	if (residual)
 	{
-		float r = 0;
-		float rtmp_part, rtmp;
+		double r = 0;
+		double rtmp_part, rtmp;
 		for (int i = 0; i < n; i++)
 		{
 			rtmp_part = 0;
@@ -233,7 +239,7 @@ int main(int argc, char** argv)
 			{
 				rtmp_part += A[k][i] * ans[j];
 			}
-			MPI_Reduce(&rtmp_part, &rtmp, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+			MPI_Reduce(&rtmp_part, &rtmp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 			if (rank == 0)
 			{
 				r += (b[i]-rtmp) * (b[i]-rtmp);
@@ -244,11 +250,18 @@ int main(int argc, char** argv)
 			cout << "Невязка: " << sqrt(r) << endl;
 		}
 	}
-	if (rank == 0 and timer)
+	if (timer)
 	{
-		ofstream stats("stats", ofstream::app);
-		stats << size << " " << n << " " << t1_end-t1_start << " " << t2_end-t2_start << endl;
-		stats.close();
+		float t1 = t1_end-t1_start, t1_max;
+		float t2 = t2_end-t2_start, t2_max;
+		MPI_Reduce(&t1, &t1_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
+		MPI_Reduce(&t2, &t2_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
+		if (rank == 0)
+		{
+			ofstream stats("stats", ofstream::app);
+			stats << size << " " << n << " " << t1_max<< " " << t2_max << endl;
+			stats.close();
+		}
 	}
 	MPI_Finalize();
 	return 0;

@@ -5,7 +5,7 @@
 
 const bool residual = true; // Считать ли невязку
 
-const bool func_fill = false; // Заполнять таблицу функцией fill или же по файлу
+const bool func_fill = true; // Заполнять таблицу функцией fill или же по файлу
 
 const bool DEBUG = false; 
 
@@ -13,14 +13,14 @@ const bool timer = true; // Писать ли время выполнения в
 
 using namespace std;
 
-float fill(int i, int j)
+double fill(int i, int j)
 {
 	return i>j?i:j;
 }
 
 
 
-void show_system(int n, float** A, float b[])
+void show_system(int n, double** A, double b[])
 {
 	for (int i = 0; i < n; i++) 
 	{
@@ -35,20 +35,19 @@ void show_system(int n, float** A, float b[])
 int main(int argc, char** argv)
 {
 	int n;
-	float **A;
-	float *b;
+	double **A;
+	double *b;
 	// Инициализация системы
 	if (func_fill)
 	{
-		int n;
 		cout << "Размер генерируемой системы: ";
 		cin >> n;
-		A = new float*[n];
+		A = new double*[n];
 		for (int i = 0; i < n; i++)
 		{
-			A[i] = new float[n];
+			A[i] = new double[n];
 		}
-		b = new float[n];
+		b = new double[n];
 		for (int i = 0; i < n; i++)
 		{
 			b[i] = 0;
@@ -73,22 +72,22 @@ int main(int argc, char** argv)
 		ifstream file(filename, ifstream::binary);
 		n;
 		file.read((char*)&n, sizeof(int));
-		A = new float*[n];
+		A = new double*[n];
 		for (int i = 0; i < n; i++)
 		{
-			A[i] = new float[n];
+			A[i] = new double[n];
 		}
-		b = new float[n];
+		b = new double[n];
 		for (int i = 0; i < n; i++) 
 		{
 			for (int j = 0; j < n; j++)
 			{
-				file.read((char*)&A[i][j], sizeof(float));
+				file.read((char*)&A[i][j], sizeof(double));
 			}
 		}
 		for (int i = 0; i < n; i++)
 		{
-			file.read((char*)&b[i], sizeof(float));
+			file.read((char*)&b[i], sizeof(double));
 		}
 		file.close();
 	}
@@ -99,9 +98,9 @@ int main(int argc, char** argv)
 	// Основной цикл
 	for (int i = 0; i < n-1; i++)
 	{
-		float x[n-i];
-		float xA[n-i];
-		float x_norm = 0;
+		double x[n-i];
+		double xA[n-i];
+		double x_norm = 0;
 		for (int j = 0; j < n-i; j++)
 		{
 			x[j] = A[j+i][i];
@@ -135,7 +134,7 @@ int main(int argc, char** argv)
 				A[j][k] -= 2*x[j-i]*xA[k-i];
 			}
 		}
-		float bx = 0;
+		double bx = 0;
 		for (int j = i; j < n; j++)
 		{
 			bx += x[j-i]*b[j];
@@ -153,10 +152,10 @@ int main(int argc, char** argv)
 	t1_end = clock();
 	t2_start = clock();
 	// Обратный ход
-	float ans[n];
+	double ans[n];
 	for (int i = n-1; i >=0; i--)
 	{
-		float right = 0;
+		double right = 0;
 		for (int j = n-1; j > i; j--)
 		{
 			right += A[i][j] * ans[j];
@@ -172,8 +171,8 @@ int main(int argc, char** argv)
 
 	if (residual)
 	{
-		float r = 0;
-		float rtmp;
+		double r = 0;
+		double rtmp;
 		for (int i = 0; i < n; i++)
 		{
 			rtmp = b[i];
